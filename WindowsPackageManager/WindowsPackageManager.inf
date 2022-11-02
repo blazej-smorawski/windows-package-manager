@@ -1,0 +1,101 @@
+;
+; WindowsPackageManager.inf
+;
+
+[Version]
+Signature="$WINDOWS NT$"
+Class="ActivityMonitor" 
+ClassGuid={b86dff51-a31e-4bac-b3cf-e8cfe75c9fc2}
+Provider=%ManufacturerName%
+DriverVer=24/10/2022,1.0.0.0
+CatalogFile=WindowsPackageManager.cat
+
+;This template is supported for OS version 17763 (Windows 10 version 1809) and after.
+;For Windows OS prior to Windows 10 1809 set DefaultDestDir = 12
+[DestinationDirs]
+DefaultDestDir							= 12
+WindowsPackageManager.DriverFiles		= 12            ;%windir%\system32\drivers
+
+;;
+;; Default install sections
+;;
+
+[DefaultInstall]
+OptionDesc          = %ServiceDescription%
+CopyFiles           = WindowsPackageManager.DriverFiles
+
+[DefaultInstall.Services]
+AddService          = %ServiceName%,,WindowsPackageManager.Service
+
+;;
+;; Default uninstall sections
+;;
+
+[DefaultUninstall]
+DelFiles   = WindowsPackageManager.DriverFiles
+
+[DefaultUninstall.Services]
+DelService = %ServiceName%,0x200      ;Ensure service is stopped before deleting
+
+;
+; Services Section
+;
+
+[WindowsPackageManager.Service]
+DisplayName      = %ServiceName%
+Description      = %ServiceDescription%
+ServiceBinary    = %12%\%DriverName%.sys        ;%windir%\system32\drivers\
+Dependencies     = FltMgr
+ServiceType      = 2                            ;SERVICE_FILE_SYSTEM_DRIVER
+StartType        = 3                            ;SERVICE_DEMAND_START
+ErrorControl     = 1                            ;SERVICE_ERROR_NORMAL
+LoadOrderGroup   = "FSFilter Activity Monitor"
+AddReg           = WindowsPackageManager.AddRegistry
+
+;
+; Registry Modifications
+;
+
+[WindowsPackageManager.AddRegistry]
+HKR,,"SupportedFeatures",0x00010001,0x3
+HKR,"Instances","DefaultInstance",0x00000000,%DefaultInstance%
+HKR,"Instances\"%Instance1.Name%,"Altitude",0x00000000,%Instance1.Altitude%
+HKR,"Instances\"%Instance1.Name%,"Flags",0x00010001,%Instance1.Flags%
+HKR,"Instances\"%Instance2.Name%,"Altitude",0x00000000,%Instance2.Altitude%
+HKR,"Instances\"%Instance2.Name%,"Flags",0x00010001,%Instance2.Flags%
+HKR,"Instances\"%Instance3.Name%,"Altitude",0x00000000,%Instance3.Altitude%
+HKR,"Instances\"%Instance3.Name%,"Flags",0x00010001,%Instance3.Flags%
+
+;
+; Copy Files
+;
+
+[WindowsPackageManager.DriverFiles]
+%DriverName%.sys
+
+[SourceDisksFiles]
+WindowsPackageManager.sys = 1,,
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[Strings]
+ManufacturerName		= "B³a¿ej Smorawski"
+DiskName				= "WindowsPackageManager Source Disk"
+ProviderString          = "B³a¿ej Smorawski"
+ServiceDescription      = "WindowsPackageManager mini-filter driver"
+ServiceName             = "WindowsPackageManager"
+DriverName              = "WindowsPackageManager"
+UserAppName             = "WindowsPackageManager"
+
+;Instances specific information.
+DefaultInstance         = "WindowsPackageManager - Top Instance"
+Instance1.Name          = "WindowsPackageManager - Middle Instance"
+Instance1.Altitude      = "370000"
+Instance1.Flags         = 0x1          ; Suppress automatic attachments
+Instance2.Name          = "WindowsPackageManager - Bottom Instance"
+Instance2.Altitude      = "361000"
+Instance2.Flags         = 0x1          ; Suppress automatic attachments
+Instance3.Name          = "WindowsPackageManager - Top Instance"
+Instance3.Altitude      = "385100"
+Instance3.Flags         = 0x1          ; Suppress automatic attachments

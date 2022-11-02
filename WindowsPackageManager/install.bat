@@ -1,0 +1,2 @@
+start /wait RUNDLL32.EXE SETUPAPI.DLL,InstallHinfSection DefaultUninstall 132 %Systemdrive%\drivertest\drivers\WindowsPackageManager.inf
+start /wait RUNDLL32.EXE SETUPAPI.DLL,InstallHinfSection DefaultInstall 132 %Systemdrive%\drivertest\drivers\WindowsPackageManager.inf
