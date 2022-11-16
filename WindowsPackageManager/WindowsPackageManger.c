@@ -2,6 +2,7 @@
 #include <ntstrsafe.h>
 
 #define     FILENAME_SIZE 1024
+#define     FILENAME_SIZE_BYTES FILENAME_SIZE * 2
 #define     CHECK(status) \
 if (!NT_SUCCESS(status)) {\
     return FLT_PREOP_SUCCESS_NO_CALLBACK;\
@@ -11,6 +12,7 @@ PFLT_FILTER         Filter;
 RTL_AVL_TABLE       LogTable;
 HANDLE              LogHandle;
 IO_STATUS_BLOCK     IoStatusBlock;
+DWORD               Counter;
 
 NTSTATUS ZwQueryInformationProcess(
     _In_      HANDLE           ProcessHandle,
@@ -20,6 +22,58 @@ NTSTATUS ZwQueryInformationProcess(
     _Out_opt_ PULONG           ReturnLength
 );
 
+NTSTATUS WriteLogToFile() {
+    NTSTATUS            status;
+    UNICODE_STRING      uniName;
+    OBJECT_ATTRIBUTES   objAttr;
+
+    RtlInitUnicodeString(&uniName, L"\\DosDevices\\C:\\WINDOWS\\WindowsPackageManager.log");  // or L"\\SystemRoot\\example.txt"
+    InitializeObjectAttributes(&objAttr, &uniName,
+        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+        NULL, NULL
+    );
+
+    status = ZwCreateFile(&LogHandle,
+        GENERIC_WRITE,
+        &objAttr, &IoStatusBlock, NULL,
+        FILE_ATTRIBUTE_NORMAL,
+        0,
+        FILE_OVERWRITE_IF,
+        FILE_SYNCHRONOUS_IO_NONALERT,
+        NULL, 0
+    );
+    
+    if (!NT_SUCCESS(status)) {
+        return STATUS_FILE_NOT_AVAILABLE;
+    }
+
+    for (PUNICODE_STRING log = RtlEnumerateGenericTableAvl(&LogTable, TRUE);
+        log != NULL;
+        log = RtlEnumerateGenericTableAvl(&LogTable, FALSE)) {
+        
+        SIZE_T logLength;
+
+        status = RtlStringCbLengthW(
+            log->Buffer,
+            FILENAME_SIZE,
+            &logLength
+        );
+        CHECK(status)
+
+        status = ZwWriteFile(
+            LogHandle,
+            NULL, NULL, NULL,
+            &IoStatusBlock,
+            log,
+            (ULONG)logLength,
+            NULL, NULL
+        );
+        CHECK(status)
+    }
+
+    ZwClose(LogHandle);
+    return 0;
+}
 
 FLT_PREOP_CALLBACK_STATUS
 PreCreateOperation(
@@ -35,11 +89,13 @@ PreCreateOperation(
     WCHAR       exeNameBuffer[FILENAME_SIZE];
 
     NTSTATUS            status;
-    size_t              fileNameLength;
+    //size_t              fileNameLength;
     HANDLE              processHandle;
     OBJECT_ATTRIBUTES   objectAttributes;
     CLIENT_ID           clientId;
     UNICODE_STRING      exeNameString;
+    UNICODE_STRING      logString;
+    BOOLEAN             newLog;
 
     clientId.UniqueProcess = PsGetCurrentProcessId();
     clientId.UniqueThread = NULL;
@@ -77,14 +133,31 @@ PreCreateOperation(
     );
     CHECK(status)
 
-    status = RtlStringCbLengthW(
+    /*status = RtlStringCbLengthW(
         fileNameBuffer,
         FILENAME_SIZE,
         &fileNameLength
     );
-    CHECK(status)
+    CHECK(status)*/
 
-    status = ZwWriteFile(
+    logString.Buffer = fileNameBuffer;
+    logString.Length = FILENAME_SIZE_BYTES;
+    logString.MaximumLength = FILENAME_SIZE_BYTES;
+
+    RtlInsertElementGenericTableAvl(
+        &LogTable,
+        &logString,
+        FILENAME_SIZE_BYTES,
+        &newLog
+    );
+    Counter++;
+
+    if (Counter % 100 == 0) {
+        status = WriteLogToFile();
+        CHECK(status)
+    }
+
+    /*status = ZwWriteFile(
         LogHandle, 
         NULL, NULL, NULL, 
         &IoStatusBlock,
@@ -92,7 +165,7 @@ PreCreateOperation(
         (ULONG)fileNameLength, 
         NULL, NULL
     );
-    CHECK(status)
+    CHECK(status)*/
 
     return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
@@ -120,7 +193,7 @@ FilterUnload(
     UNREFERENCED_PARAMETER(Flags);
 
     FltUnregisterFilter(Filter);
-    ZwClose(LogHandle);
+    //ZwClose(LogHandle);
 
     return STATUS_SUCCESS;
 }
@@ -167,6 +240,58 @@ CONST FLT_REGISTRATION FilterRegistration = {
 
 };
 
+RTL_GENERIC_COMPARE_RESULTS
+CompareFileNames(
+    __in struct _RTL_AVL_TABLE* Table,
+    __in PVOID  FirstStruct,
+    __in PVOID  SecondStruct
+) {
+    UNREFERENCED_PARAMETER(Table);
+
+    LONG result = RtlCompareUnicodeString(
+        FirstStruct,
+        SecondStruct,
+        FALSE
+    );
+
+    if (result == 0) {
+        return GenericEqual;
+    }
+    else if (result > 0) {
+        return GenericGreaterThan;
+    }
+    else {
+        return GenericLessThan;
+    }
+}
+
+PVOID
+AllocateRoutine (
+    __in struct _RTL_AVL_TABLE* Table,
+    __in CLONG  ByteSize
+) {
+    UNREFERENCED_PARAMETER(Table);
+
+    return ExAllocatePool2(
+        POOL_FLAG_PAGED,
+        ByteSize,
+        'wpma'
+    );
+}
+
+VOID
+FreeRoutine(
+    __in struct _RTL_AVL_TABLE* Table,
+    __in PVOID  Buffer
+) {
+    UNREFERENCED_PARAMETER(Table);
+
+    ExFreePoolWithTag(
+        Buffer,
+        'wpma'
+    );
+}
+
 NTSTATUS
 DriverEntry(
     _In_ PDRIVER_OBJECT DriverObject,
@@ -174,32 +299,23 @@ DriverEntry(
 ) {
     UNREFERENCED_PARAMETER(RegistryPath);
 
-    NTSTATUS            status;
-    UNICODE_STRING      uniName;
-    OBJECT_ATTRIBUTES   objAttr;
+    NTSTATUS    status;
 
-    RtlInitUnicodeString(&uniName, L"\\DosDevices\\C:\\WINDOWS\\WindowsPackageManager.log");  // or L"\\SystemRoot\\example.txt"
-    InitializeObjectAttributes(&objAttr, &uniName,
-        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-        NULL, NULL);
-
-    status = ZwCreateFile(&LogHandle,
-        GENERIC_WRITE,
-        &objAttr, &IoStatusBlock, NULL,
-        FILE_ATTRIBUTE_NORMAL,
-        0,
-        FILE_OVERWRITE_IF,
-        FILE_SYNCHRONOUS_IO_NONALERT,
-        NULL, 0);
-
-    if (!NT_SUCCESS(status)) {
-        return status;
-    }
+    RtlInitializeGenericTableAvl(
+        &LogTable,
+        CompareFileNames,
+        AllocateRoutine,
+        FreeRoutine,
+        NULL
+    );
+    
+    Counter = 0;
 
     status = FltRegisterFilter(
         DriverObject,                  //Driver
         &FilterRegistration,           //Registration
-        &Filter);    //RetFilter
+        &Filter
+    );
 
     status = FltStartFiltering(Filter);
     if (!NT_SUCCESS(status)) {
