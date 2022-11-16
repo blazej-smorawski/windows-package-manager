@@ -14,6 +14,10 @@ HANDLE              LogHandle;
 IO_STATUS_BLOCK     IoStatusBlock;
 DWORD               Counter;
 
+CHAR                ShMem[33554432];
+SIZE_T              ShMemOffset;
+FAST_MUTEX          ShMemMutex;
+
 NTSTATUS ZwQueryInformationProcess(
     _In_      HANDLE           ProcessHandle,
     _In_      PROCESSINFOCLASS ProcessInformationClass,
@@ -47,14 +51,14 @@ NTSTATUS WriteLogToFile() {
         return STATUS_FILE_NOT_AVAILABLE;
     }
 
-    for (PUNICODE_STRING log = RtlEnumerateGenericTableAvl(&LogTable, TRUE);
+    for (PWCHAR log = RtlEnumerateGenericTableAvl(&LogTable, TRUE);
         log != NULL;
         log = RtlEnumerateGenericTableAvl(&LogTable, FALSE)) {
         
         SIZE_T logLength;
 
         status = RtlStringCbLengthW(
-            log->Buffer,
+            log,
             FILENAME_SIZE,
             &logLength
         );
@@ -94,7 +98,6 @@ PreCreateOperation(
     OBJECT_ATTRIBUTES   objectAttributes;
     CLIENT_ID           clientId;
     UNICODE_STRING      exeNameString;
-    UNICODE_STRING      logString;
     BOOLEAN             newLog;
 
     clientId.UniqueProcess = PsGetCurrentProcessId();
@@ -133,20 +136,9 @@ PreCreateOperation(
     );
     CHECK(status)
 
-    /*status = RtlStringCbLengthW(
-        fileNameBuffer,
-        FILENAME_SIZE,
-        &fileNameLength
-    );
-    CHECK(status)*/
-
-    logString.Buffer = fileNameBuffer;
-    logString.Length = FILENAME_SIZE_BYTES;
-    logString.MaximumLength = FILENAME_SIZE_BYTES;
-
     RtlInsertElementGenericTableAvl(
         &LogTable,
-        &logString,
+        &fileNameBuffer,
         FILENAME_SIZE_BYTES,
         &newLog
     );
@@ -156,16 +148,6 @@ PreCreateOperation(
         status = WriteLogToFile();
         CHECK(status)
     }
-
-    /*status = ZwWriteFile(
-        LogHandle, 
-        NULL, NULL, NULL, 
-        &IoStatusBlock,
-        fileNameBuffer, 
-        (ULONG)fileNameLength, 
-        NULL, NULL
-    );
-    CHECK(status)*/
 
     return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
@@ -247,10 +229,19 @@ CompareFileNames(
     __in PVOID  SecondStruct
 ) {
     UNREFERENCED_PARAMETER(Table);
+    UNICODE_STRING str1;
+    UNICODE_STRING str2;
+
+    str1.Buffer = FirstStruct;
+    str2.Buffer = SecondStruct;
+    str1.Length = FILENAME_SIZE;
+    str2.Length = FILENAME_SIZE;
+    str1.MaximumLength = FILENAME_SIZE;
+    str2.MaximumLength = FILENAME_SIZE;
 
     LONG result = RtlCompareUnicodeString(
-        FirstStruct,
-        SecondStruct,
+        &str1,
+        &str2,
         FALSE
     );
 
@@ -272,11 +263,27 @@ AllocateRoutine (
 ) {
     UNREFERENCED_PARAMETER(Table);
 
-    return ExAllocatePool2(
-        POOL_FLAG_PAGED,
+    ExAcquireFastMutex(&ShMemMutex);
+
+    if(ShMem + ShMemOffset + ByteSize > ShMem + sizeof(ShMem))
+    {
+        ShMemOffset = 0;
+    }
+
+    PCHAR ret = ShMem + ShMemOffset;
+    ShMemOffset += ByteSize;
+
+    KdPrint(("%p + %z = %p", ShMem, ShMemOffset, ret));
+
+    /*return ExAllocatePool2(
+        POOL_FLAG_NON_PAGED,
         ByteSize,
         'wpma'
-    );
+    );*/
+
+    ExReleaseFastMutex(&ShMemMutex);
+
+    return ret;
 }
 
 VOID
@@ -285,11 +292,11 @@ FreeRoutine(
     __in PVOID  Buffer
 ) {
     UNREFERENCED_PARAMETER(Table);
-
-    ExFreePoolWithTag(
+    UNREFERENCED_PARAMETER(Buffer);
+    /*ExFreePoolWithTag(
         Buffer,
         'wpma'
-    );
+    );*/
 }
 
 NTSTATUS
@@ -300,6 +307,10 @@ DriverEntry(
     UNREFERENCED_PARAMETER(RegistryPath);
 
     NTSTATUS    status;
+    Counter = 0;
+    ShMemOffset = 0;
+
+    ExInitializeFastMutex(&ShMemMutex);
 
     RtlInitializeGenericTableAvl(
         &LogTable,
@@ -308,8 +319,6 @@ DriverEntry(
         FreeRoutine,
         NULL
     );
-    
-    Counter = 0;
 
     status = FltRegisterFilter(
         DriverObject,                  //Driver
