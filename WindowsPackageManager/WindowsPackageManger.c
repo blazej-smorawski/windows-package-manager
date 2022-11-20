@@ -9,75 +9,9 @@ if (!NT_SUCCESS(status)) {\
 }\
 
 PFLT_FILTER         Filter;
-RTL_AVL_TABLE       LogTable;
-HANDLE              LogHandle;
+PFLT_PORT            Port;
 IO_STATUS_BLOCK     IoStatusBlock;
-DWORD               Counter;
 
-CHAR                ShMem[33554432];
-SIZE_T              ShMemOffset;
-FAST_MUTEX          ShMemMutex;
-
-NTSTATUS ZwQueryInformationProcess(
-    _In_      HANDLE           ProcessHandle,
-    _In_      PROCESSINFOCLASS ProcessInformationClass,
-    _Out_     PVOID            ProcessInformation,
-    _In_      ULONG            ProcessInformationLength,
-    _Out_opt_ PULONG           ReturnLength
-);
-
-NTSTATUS WriteLogToFile() {
-    NTSTATUS            status;
-    UNICODE_STRING      uniName;
-    OBJECT_ATTRIBUTES   objAttr;
-
-    RtlInitUnicodeString(&uniName, L"\\DosDevices\\C:\\WINDOWS\\WindowsPackageManager.log");  // or L"\\SystemRoot\\example.txt"
-    InitializeObjectAttributes(&objAttr, &uniName,
-        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-        NULL, NULL
-    );
-
-    status = ZwCreateFile(&LogHandle,
-        GENERIC_WRITE,
-        &objAttr, &IoStatusBlock, NULL,
-        FILE_ATTRIBUTE_NORMAL,
-        0,
-        FILE_OVERWRITE_IF,
-        FILE_SYNCHRONOUS_IO_NONALERT,
-        NULL, 0
-    );
-    
-    if (!NT_SUCCESS(status)) {
-        return STATUS_FILE_NOT_AVAILABLE;
-    }
-
-    for (PWCHAR log = RtlEnumerateGenericTableAvl(&LogTable, TRUE);
-        log != NULL;
-        log = RtlEnumerateGenericTableAvl(&LogTable, FALSE)) {
-        
-        SIZE_T logLength;
-
-        status = RtlStringCbLengthW(
-            log,
-            FILENAME_SIZE,
-            &logLength
-        );
-        CHECK(status)
-
-        status = ZwWriteFile(
-            LogHandle,
-            NULL, NULL, NULL,
-            &IoStatusBlock,
-            log,
-            (ULONG)logLength,
-            NULL, NULL
-        );
-        CHECK(status)
-    }
-
-    ZwClose(LogHandle);
-    return 0;
-}
 
 FLT_PREOP_CALLBACK_STATUS
 PreCreateOperation(
@@ -93,61 +27,17 @@ PreCreateOperation(
     WCHAR       exeNameBuffer[FILENAME_SIZE];
 
     NTSTATUS            status;
-    //size_t              fileNameLength;
     HANDLE              processHandle;
-    OBJECT_ATTRIBUTES   objectAttributes;
-    CLIENT_ID           clientId;
-    UNICODE_STRING      exeNameString;
-    BOOLEAN             newLog;
 
-    clientId.UniqueProcess = PsGetCurrentProcessId();
-    clientId.UniqueThread = NULL;
-    InitializeObjectAttributes(
-        &objectAttributes,
-        NULL, 0, NULL, NULL
-    );
-
-    status = ZwOpenProcess(&processHandle,
-        PROCESS_ALL_ACCESS,
-        &objectAttributes,
-        &clientId
-    );
-    CHECK(status);
-
-    exeNameString.Buffer = exeNameBuffer;
-    exeNameString.Length = 0;
-    exeNameString.MaximumLength = sizeof(exeNameBuffer);
-
-    status = ZwQueryInformationProcess(
-        processHandle,
-        ProcessImageFileName,
-        &exeNameString,
-        sizeof(exeNameBuffer),
-        NULL
-    );
-    CHECK(status)
+    processHandle = PsGetCurrentProcessId();
 
     status = RtlStringCchPrintfW(
         fileNameBuffer,
         FILENAME_SIZE,
-        L"%wZ::%wZ\n",
-        &FltObjects->FileObject->FileName,
-        &exeNameString
+        L"%wZ\n",
+        &FltObjects->FileObject->FileName
     );
     CHECK(status)
-
-    RtlInsertElementGenericTableAvl(
-        &LogTable,
-        &fileNameBuffer,
-        FILENAME_SIZE_BYTES,
-        &newLog
-    );
-    Counter++;
-
-    if (Counter % 100 == 0) {
-        status = WriteLogToFile();
-        CHECK(status)
-    }
 
     return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
@@ -222,81 +112,35 @@ CONST FLT_REGISTRATION FilterRegistration = {
 
 };
 
-RTL_GENERIC_COMPARE_RESULTS
-CompareFileNames(
-    __in struct _RTL_AVL_TABLE* Table,
-    __in PVOID  FirstStruct,
-    __in PVOID  SecondStruct
+NTSTATUS
+connectNotify(
+    IN PFLT_PORT ClientPort,
+    IN PVOID ServerPortCookie,
+    IN PVOID ConnectionContext,
+    IN ULONG SizeOfContext,
+    OUT PVOID* ConnectionPortCookie
 ) {
-    UNREFERENCED_PARAMETER(Table);
-    UNICODE_STRING str1;
-    UNICODE_STRING str2;
-
-    str1.Buffer = FirstStruct;
-    str2.Buffer = SecondStruct;
-    str1.Length = FILENAME_SIZE;
-    str2.Length = FILENAME_SIZE;
-    str1.MaximumLength = FILENAME_SIZE;
-    str2.MaximumLength = FILENAME_SIZE;
-
-    LONG result = RtlCompareUnicodeString(
-        &str1,
-        &str2,
-        FALSE
-    );
-
-    if (result == 0) {
-        return GenericEqual;
-    }
-    else if (result > 0) {
-        return GenericGreaterThan;
-    }
-    else {
-        return GenericLessThan;
-    }
-}
-
-PVOID
-AllocateRoutine (
-    __in struct _RTL_AVL_TABLE* Table,
-    __in CLONG  ByteSize
-) {
-    UNREFERENCED_PARAMETER(Table);
-
-    ExAcquireFastMutex(&ShMemMutex);
-
-    if(ShMem + ShMemOffset + ByteSize > ShMem + sizeof(ShMem))
-    {
-        ShMemOffset = 0;
-    }
-
-    PCHAR ret = ShMem + ShMemOffset;
-    ShMemOffset += ByteSize;
-
-    KdPrint(("%p + %z = %p", ShMem, ShMemOffset, ret));
-
-    /*return ExAllocatePool2(
-        POOL_FLAG_NON_PAGED,
-        ByteSize,
-        'wpma'
-    );*/
-
-    ExReleaseFastMutex(&ShMemMutex);
-
-    return ret;
+    UNREFERENCED_PARAMETER(ClientPort);
+    return 0;
 }
 
 VOID
-FreeRoutine(
-    __in struct _RTL_AVL_TABLE* Table,
-    __in PVOID  Buffer
+disconnectNotify(
+    IN PVOID ConnectionCookie
 ) {
-    UNREFERENCED_PARAMETER(Table);
-    UNREFERENCED_PARAMETER(Buffer);
-    /*ExFreePoolWithTag(
-        Buffer,
-        'wpma'
-    );*/
+    UNREFERENCED_PARAMETER(ConnectionCookie);
+}
+
+NTSTATUS
+messageNotify(
+    IN PVOID PortCookie,
+    IN PVOID InputBuffer OPTIONAL,
+    IN ULONG InputBufferLength,
+    OUT PVOID OutputBuffer OPTIONAL,
+    IN ULONG OutputBufferLength,
+    OUT PULONG ReturnOutputBufferLength
+) {
+    return 0;
 }
 
 NTSTATUS
@@ -307,18 +151,6 @@ DriverEntry(
     UNREFERENCED_PARAMETER(RegistryPath);
 
     NTSTATUS    status;
-    Counter = 0;
-    ShMemOffset = 0;
-
-    ExInitializeFastMutex(&ShMemMutex);
-
-    RtlInitializeGenericTableAvl(
-        &LogTable,
-        CompareFileNames,
-        AllocateRoutine,
-        FreeRoutine,
-        NULL
-    );
 
     status = FltRegisterFilter(
         DriverObject,                  //Driver
@@ -329,8 +161,38 @@ DriverEntry(
     status = FltStartFiltering(Filter);
     if (!NT_SUCCESS(status)) {
         FltUnregisterFilter(Filter);
-        ZwClose(LogHandle);
     }
+
+    // Create port for communication
+
+    PSECURITY_DESCRIPTOR securityDescriptor;
+    status = FltBuildDefaultSecurityDescriptor(
+        &securityDescriptor,
+        FLT_PORT_ALL_ACCESS | FLT_PORT_CONNECT
+    );
+    CHECK(status)
+
+    OBJECT_ATTRIBUTES attributes;
+    InitializeObjectAttributes(
+        &attributes,
+        L"\\WindowsPackageManagerPort",
+        OBJ_KERNEL_HANDLE,
+        NULL,
+        securityDescriptor
+    )
+
+    status = FltCreateCommunicationPort(
+        Filter,
+        &Port,
+        &attributes,
+        NULL,
+        connectNotify,
+        disconnectNotify,
+        messageNotify,
+        1
+    );
+
+
 
     return status;
 }
