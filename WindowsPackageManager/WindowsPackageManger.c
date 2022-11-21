@@ -9,7 +9,9 @@ if (!NT_SUCCESS(status)) {\
 }\
 
 PFLT_FILTER         Filter;
-PFLT_PORT            Port;
+PFLT_PORT           ServerPort;
+PFLT_PORT           GlobalClientPort;
+HANDLE              TargetPID;
 IO_STATUS_BLOCK     IoStatusBlock;
 
 
@@ -22,22 +24,26 @@ PreCreateOperation(
     UNREFERENCED_PARAMETER(Data);
     UNREFERENCED_PARAMETER(FltObjects);
     UNREFERENCED_PARAMETER(CompletionContext);
-        
-    WCHAR       fileNameBuffer[FILENAME_SIZE];
-    WCHAR       exeNameBuffer[FILENAME_SIZE];
 
     NTSTATUS            status;
     HANDLE              processHandle;
+    LARGE_INTEGER       timeout;
+
+    timeout.QuadPart = -10;
 
     processHandle = PsGetCurrentProcessId();
 
-    status = RtlStringCchPrintfW(
-        fileNameBuffer,
-        FILENAME_SIZE,
-        L"%wZ\n",
-        &FltObjects->FileObject->FileName
-    );
-    CHECK(status)
+    if (TargetPID != NULL && TargetPID == processHandle) {
+        status = FltSendMessage(
+            Filter,
+            &GlobalClientPort,
+            FltObjects->FileObject->FileName.Buffer,
+            FltObjects->FileObject->FileName.Length,
+            0,
+            0,
+            &timeout
+        );
+    }
 
     return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
@@ -64,8 +70,8 @@ FilterUnload(
 ) {
     UNREFERENCED_PARAMETER(Flags);
 
+    FltCloseCommunicationPort(ServerPort);
     FltUnregisterFilter(Filter);
-    //ZwClose(LogHandle);
 
     return STATUS_SUCCESS;
 }
@@ -120,7 +126,12 @@ connectNotify(
     IN ULONG SizeOfContext,
     OUT PVOID* ConnectionPortCookie
 ) {
-    UNREFERENCED_PARAMETER(ClientPort);
+    UNREFERENCED_PARAMETER(ServerPortCookie);
+    UNREFERENCED_PARAMETER(ConnectionContext);
+    UNREFERENCED_PARAMETER(SizeOfContext);
+    UNREFERENCED_PARAMETER(ConnectionPortCookie);
+
+    GlobalClientPort = ClientPort;
     return 0;
 }
 
@@ -129,6 +140,7 @@ disconnectNotify(
     IN PVOID ConnectionCookie
 ) {
     UNREFERENCED_PARAMETER(ConnectionCookie);
+    TargetPID = NULL;
 }
 
 NTSTATUS
@@ -140,6 +152,14 @@ messageNotify(
     IN ULONG OutputBufferLength,
     OUT PULONG ReturnOutputBufferLength
 ) {
+    UNREFERENCED_PARAMETER(PortCookie);
+    UNREFERENCED_PARAMETER(OutputBuffer);
+    UNREFERENCED_PARAMETER(OutputBufferLength);
+    UNREFERENCED_PARAMETER(ReturnOutputBufferLength);
+
+    if (InputBufferLength == sizeof(void*)) {
+        TargetPID = *((HANDLE*)InputBuffer);
+    }
     return 0;
 }
 
@@ -151,6 +171,9 @@ DriverEntry(
     UNREFERENCED_PARAMETER(RegistryPath);
 
     NTSTATUS    status;
+
+    TargetPID = NULL;
+    GlobalClientPort = NULL;
 
     status = FltRegisterFilter(
         DriverObject,                  //Driver
@@ -172,10 +195,13 @@ DriverEntry(
     );
     CHECK(status)
 
+    UNICODE_STRING portName;
+    RtlInitUnicodeString(&portName, L"\\WindowsPackageManagerPort");
+
     OBJECT_ATTRIBUTES attributes;
     InitializeObjectAttributes(
         &attributes,
-        L"\\WindowsPackageManagerPort",
+        &portName,
         OBJ_KERNEL_HANDLE,
         NULL,
         securityDescriptor
@@ -183,16 +209,19 @@ DriverEntry(
 
     status = FltCreateCommunicationPort(
         Filter,
-        &Port,
+        &ServerPort,
         &attributes,
         NULL,
         connectNotify,
         disconnectNotify,
         messageNotify,
-        1
+        100
     );
+    CHECK(status)
 
-
+    FltFreeSecurityDescriptor(
+        securityDescriptor
+    );
 
     return status;
 }
