@@ -38,7 +38,7 @@ PreCreateOperation(
             Filter,
             &GlobalClientPort,
             FltObjects->FileObject->FileName.Buffer,
-            FltObjects->FileObject->FileName.Length,
+            FltObjects->FileObject->FileName.Length + 1, // `Length` does not include the trailing null character
             0,
             0,
             &timeout

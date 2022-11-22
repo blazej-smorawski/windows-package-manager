@@ -57,6 +57,7 @@ int _tmain(int argc, TCHAR *argv[]) {
 
     HANDLE      PID = pi.dwProcessId;
     DWORD       bytesReturned = 0;
+
     result = FilterSendMessage(
         port,
         &PID,
@@ -68,9 +69,9 @@ int _tmain(int argc, TCHAR *argv[]) {
 
     printf("FilterSendMessage = %d\n", result);
 
-    MESSAGE message;
+    MESSAGE     message;
+    ZeroMemory(&message, sizeof(message));
 
-    int i = 0;
     while (TRUE) {
         result = FilterGetMessage(
             port,
@@ -79,9 +80,12 @@ int _tmain(int argc, TCHAR *argv[]) {
             NULL
         );
 
-        printf("FilterGetMessage = %d\n", result);
-        wprintf(L"%s\n", message.bytes);
-        i++;
+        if (result != S_OK) {
+            printf("FilterGetMessage = %d\n", result);
+        }
+        else {
+            wprintf(L"%s\n", message.bytes);
+        }
     }
 
     // Wait until child process exits.
