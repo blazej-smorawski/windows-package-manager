@@ -25,27 +25,7 @@ PreCreateOperation(
     UNREFERENCED_PARAMETER(FltObjects);
     UNREFERENCED_PARAMETER(CompletionContext);
 
-    NTSTATUS            status;
-    HANDLE              processHandle;
-    LARGE_INTEGER       timeout;
-
-    timeout.QuadPart = -10;
-
-    processHandle = PsGetCurrentProcessId();
-
-    if (TargetPID != NULL && TargetPID == processHandle) {
-        status = FltSendMessage(
-            Filter,
-            &GlobalClientPort,
-            FltObjects->FileObject->FileName.Buffer,
-            FltObjects->FileObject->FileName.Length + 1, // `Length` does not include the trailing null character
-            0,
-            0,
-            &timeout
-        );
-    }
-
-    return FLT_PREOP_SUCCESS_NO_CALLBACK;
+    return FLT_PREOP_SUCCESS_WITH_CALLBACK;
 }
 
 FLT_POSTOP_CALLBACK_STATUS
@@ -60,7 +40,43 @@ PostCreateOperation(
     UNREFERENCED_PARAMETER(CompletionContext);
     UNREFERENCED_PARAMETER(Flags);
 
-    KdPrint(("PostCreateOperation\n"));
+    NTSTATUS            status;
+    HANDLE              processHandle;
+    LARGE_INTEGER       timeout;
+    BOOLEAN             isNewFile = FALSE;
+    ULONG               createDisposition = 0;
+
+    timeout.QuadPart = -10;
+
+    processHandle = PsGetCurrentProcessId();
+
+    // Get create disposition
+    // `Options`
+    // Bitmask of flags that specify the options to be applied when creating or opening the file, 
+    // as well as the action to be taken if the file already exists.
+    // The low 24 bits of this member correspond to the CreateOptions parameter to FltCreateFile.
+    // The high 8 bits correspond to the CreateDisposition parameter to FltCreateFile.
+    createDisposition = (Data->Iopb->Parameters.Create.Options >> 24) & 0x000000FF;
+
+    // Check if new file is creating or not
+    isNewFile = ((FILE_SUPERSEDE == createDisposition)
+        || (FILE_CREATE == createDisposition)
+        || (FILE_OPEN_IF == createDisposition)
+        || (FILE_OVERWRITE == createDisposition)
+        || (FILE_OVERWRITE_IF == createDisposition));
+
+    if (TargetPID != NULL && isNewFile && TargetPID == processHandle) {
+        status = FltSendMessage(
+            Filter,
+            &GlobalClientPort,
+            FltObjects->FileObject->FileName.Buffer,
+            FltObjects->FileObject->FileName.Length + 1, // `Length` does not include the trailing null character
+            0,
+            0,
+            &timeout
+        );
+    }
+
     return FLT_POSTOP_FINISHED_PROCESSING;
 }
 
