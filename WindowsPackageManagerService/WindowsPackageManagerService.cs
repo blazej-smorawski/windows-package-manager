@@ -99,14 +99,15 @@ namespace WindowsPackageManagerService
                 eventLog.WriteEntry(strings[0] + " " + strings[1] + " " + strings[2]);
 
                 SortedSet<string> files;
-                if (logsCollection.TryGetValue(strings[0], out files))
+                if (logsCollection.TryGetValue(strings[2], out files))
                 {
-                    files.Add(strings[2]);
+                    files.Add(strings[0]);
                 } 
                 else
                 {
                     files = new SortedSet<string>();
-                    logsCollection.Add(strings[0], files);
+                    files.Add(strings[0]);
+                    logsCollection.Add(strings[2], files);
                 }
             }
         }

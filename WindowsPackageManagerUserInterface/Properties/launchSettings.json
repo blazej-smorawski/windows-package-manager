@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "WindowsPackageManagerUserInterface (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "WindowsPackageManagerUserInterface (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

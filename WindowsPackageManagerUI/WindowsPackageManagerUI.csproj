@@ -13,6 +13,15 @@
 	<Nullable>enable</Nullable>
 	<UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
+	<EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+	<GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+	<AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
+	<AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+	<GenerateTestArtifacts>True</GenerateTestArtifacts>
+	<AppxBundle>Never</AppxBundle>
+
+	<WindowsPackageType>None</WindowsPackageType>
+	<WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>
