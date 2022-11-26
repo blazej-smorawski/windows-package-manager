@@ -93,13 +93,24 @@
     <Inf Include="WindowsPackageManager.inf" />
   </ItemGroup>
   <ItemGroup>
+    <FilesToPackage Include="E:\GitHub\WindowsPackageManager\WindowsPackageManagerService\bin\Release\WindowsPackageManagerService.exe" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      <PackageRelativeDirectory>WindowsPackageManagerService.ex</PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="E:\GitHub\WindowsPackageManager\WindowsPackageManagerService\bin\Release\WindowsPackageManagerService.exe.config" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      <PackageRelativeDirectory>WindowsPackageManagerService.exe.config</PackageRelativeDirectory>
+    </FilesToPackage>
     <FilesToPackage Include="E:\GitHub\WindowsPackageManager\WindowsPackageManager\install.bat" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
       <PackageRelativeDirectory>
       </PackageRelativeDirectory>
     </FilesToPackage>
-    <FilesToPackage Include="E:\GitHub\WindowsPackageManager\x64\Debug\WindowsPackageManager.sys">
-      <PackageRelativeDirectory>
-      </PackageRelativeDirectory>
+    <FilesToPackage Include="E:\GitHub\WindowsPackageManager\WindowsPackageManager\install.bat" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      <PackageRelativeDirectory>install.bat</PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="E:\GitHub\WindowsPackageManager\x64\Debug\WindowsPackageManager.sys" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      <PackageRelativeDirectory>WindowsPackageManager.sys</PackageRelativeDirectory>
+    </FilesToPackage>
+    <FilesToPackage Include="E:\GitHub\WindowsPackageManager\x64\Release\WindowsPackageManager.dll" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+      <PackageRelativeDirectory>WindowsPackageManager.dll</PackageRelativeDirectory>
     </FilesToPackage>
   </ItemGroup>
   <ItemGroup>

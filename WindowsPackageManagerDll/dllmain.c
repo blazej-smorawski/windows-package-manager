@@ -13,47 +13,48 @@ typedef struct _MESSAGE {
 HANDLE      port = NULL;
 MESSAGE     message;
 
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-                     )
+HRESULT StartWindowsPackageManagerLogging() 
 {
-    HRESULT result;
+    HRESULT result = S_OK;
     ZeroMemory(&message, sizeof(message));
 
-    switch (ul_reason_for_call)
-    {
-    case DLL_PROCESS_ATTACH:
-        result = FilterConnectCommunicationPort(
-            L"\\WindowsPackageManagerPort",
-            0,
-            NULL,
-            0,
-            NULL,
-            &port
-        );
+    result = FilterConnectCommunicationPort(
+        L"\\WindowsPackageManagerPort",
+        0,
+        NULL,
+        0,
+        NULL,
+        &port
+    );
 
-        if (result != S_OK) {
-            wsprintf(message.string, L"Error: `FilterConnectCommunicationPort` = %X", result);
-            port = NULL;
-            break;
-        }
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
-    case DLL_PROCESS_DETACH:
-        CloseHandle(port);
-        break;
+    if (result != S_OK) {
+        wsprintf(
+            message.string,
+            L"Error: `FilterConnectCommunicationPort` = %X",
+            result
+        );
+        port = NULL;
     }
-    return TRUE;
+
+    return result;
 }
 
-#define CHECK(call) if (result != S_OK) {\
+HRESULT StopWindowsPackageManagerLogging()
+{
+    CloseHandle(port);
+    return S_OK;
+}
+
+#define CHECK(call, ret) if (result != S_OK) {\
 wsprintf(buf, L"Error: `" call L"` = %X", result);\
-return;\
+return ret;\
 }\
 
-void GetWindowsPackageManagerLog(LPWSTR buf, int maxCharacters) {
-    HRESULT result;
+HRESULT GetWindowsPackageManagerLog(
+    LPWSTR buf, 
+    int maxCharacters) 
+{
+    HRESULT result = S_OK;
 
     result = FilterGetMessage(
         port,
@@ -61,7 +62,7 @@ void GetWindowsPackageManagerLog(LPWSTR buf, int maxCharacters) {
         sizeof(MESSAGE),
         NULL
     );
-    CHECK(L"FilterGetMessage")
+    CHECK(L"FilterGetMessage",1)
     
     SIZE_T messageLength;
     result = StringCchLengthW(
@@ -69,13 +70,15 @@ void GetWindowsPackageManagerLog(LPWSTR buf, int maxCharacters) {
         MAX_MESSAGE_CHARS,
         &messageLength
     );
-    CHECK(L"StringCchLengthW")
+    CHECK(L"StringCchLengthW",2)
 
     result = StringCchCopyW(
         buf, 
-        messageLength,
+        messageLength+1,
         message.string
     );
-    CHECK(L"StringCchCopyW")
+    CHECK(L"StringCchCopyW", messageLength)
+
+    return result;
 }
 

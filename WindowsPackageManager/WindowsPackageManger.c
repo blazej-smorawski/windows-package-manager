@@ -1,22 +1,18 @@
 #include <fltKernel.h>
 #include <ntstrsafe.h>
 
-#define     FILENAME_SIZE 1024
+#define     FILENAME_SIZE 2048
 #define     FILENAME_SIZE_BYTES FILENAME_SIZE * 2
 #define     CHECK(status) \
 if (!NT_SUCCESS(status)) {\
-    return FLT_PREOP_SUCCESS_NO_CALLBACK;\
+    return FLT_POSTOP_FINISHED_PROCESSING;\
 }\
 
 PFLT_FILTER         Filter;
-RTL_AVL_TABLE       LogTable;
-HANDLE              LogHandle;
+PFLT_PORT           ServerPort;
+PFLT_PORT           GlobalClientPort;
 IO_STATUS_BLOCK     IoStatusBlock;
-DWORD               Counter;
 
-CHAR                ShMem[33554432];
-SIZE_T              ShMemOffset;
-FAST_MUTEX          ShMemMutex;
 
 NTSTATUS ZwQueryInformationProcess(
     _In_      HANDLE           ProcessHandle,
@@ -25,59 +21,6 @@ NTSTATUS ZwQueryInformationProcess(
     _In_      ULONG            ProcessInformationLength,
     _Out_opt_ PULONG           ReturnLength
 );
-
-NTSTATUS WriteLogToFile() {
-    NTSTATUS            status;
-    UNICODE_STRING      uniName;
-    OBJECT_ATTRIBUTES   objAttr;
-
-    RtlInitUnicodeString(&uniName, L"\\DosDevices\\C:\\WINDOWS\\WindowsPackageManager.log");  // or L"\\SystemRoot\\example.txt"
-    InitializeObjectAttributes(&objAttr, &uniName,
-        OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
-        NULL, NULL
-    );
-
-    status = ZwCreateFile(&LogHandle,
-        GENERIC_WRITE,
-        &objAttr, &IoStatusBlock, NULL,
-        FILE_ATTRIBUTE_NORMAL,
-        0,
-        FILE_OVERWRITE_IF,
-        FILE_SYNCHRONOUS_IO_NONALERT,
-        NULL, 0
-    );
-    
-    if (!NT_SUCCESS(status)) {
-        return STATUS_FILE_NOT_AVAILABLE;
-    }
-
-    for (PWCHAR log = RtlEnumerateGenericTableAvl(&LogTable, TRUE);
-        log != NULL;
-        log = RtlEnumerateGenericTableAvl(&LogTable, FALSE)) {
-        
-        SIZE_T logLength;
-
-        status = RtlStringCbLengthW(
-            log,
-            FILENAME_SIZE,
-            &logLength
-        );
-        CHECK(status)
-
-        status = ZwWriteFile(
-            LogHandle,
-            NULL, NULL, NULL,
-            &IoStatusBlock,
-            log,
-            (ULONG)logLength,
-            NULL, NULL
-        );
-        CHECK(status)
-    }
-
-    ZwClose(LogHandle);
-    return 0;
-}
 
 FLT_PREOP_CALLBACK_STATUS
 PreCreateOperation(
@@ -88,17 +31,61 @@ PreCreateOperation(
     UNREFERENCED_PARAMETER(Data);
     UNREFERENCED_PARAMETER(FltObjects);
     UNREFERENCED_PARAMETER(CompletionContext);
-        
+
+    return FLT_PREOP_SUCCESS_WITH_CALLBACK;
+}
+
+FLT_POSTOP_CALLBACK_STATUS
+PostCreateOperation(
+    _Inout_ PFLT_CALLBACK_DATA Data,
+    _In_ PCFLT_RELATED_OBJECTS FltObjects,
+    _In_ PVOID CompletionContext,
+    _In_ FLT_POST_OPERATION_FLAGS Flags
+) {
+    UNREFERENCED_PARAMETER(Data);
+    UNREFERENCED_PARAMETER(FltObjects);
+    UNREFERENCED_PARAMETER(CompletionContext);
+    UNREFERENCED_PARAMETER(Flags);
+
     WCHAR       fileNameBuffer[FILENAME_SIZE];
     WCHAR       exeNameBuffer[FILENAME_SIZE];
 
     NTSTATUS            status;
-    //size_t              fileNameLength;
+    UNICODE_STRING      exeNameString;
+    size_t              fileNameLength;
+
     HANDLE              processHandle;
     OBJECT_ATTRIBUTES   objectAttributes;
     CLIENT_ID           clientId;
-    UNICODE_STRING      exeNameString;
-    BOOLEAN             newLog;
+
+    ULONG               createDisposition = 0;
+    BOOLEAN             isNewFile = FALSE;
+    LARGE_INTEGER       timeout;
+
+    if (GlobalClientPort == NULL) {
+        return FLT_POSTOP_FINISHED_PROCESSING;
+    }
+
+    processHandle = PsGetCurrentProcessId();
+
+    // Get create disposition
+    // `Options`
+    // Bitmask of flags that specify the options to be applied when creating or opening the file, 
+    // as well as the action to be taken if the file already exists.
+    // The low 24 bits of this member correspond to the CreateOptions parameter to FltCreateFile.
+    // The high 8 bits correspond to the CreateDisposition parameter to FltCreateFile.
+    createDisposition = (Data->Iopb->Parameters.Create.Options >> 24) & 0x000000FF;
+
+    // Check if new file is creating or not
+    isNewFile = ((FILE_SUPERSEDE == createDisposition)
+        || (FILE_CREATE == createDisposition)
+        || (FILE_OPEN_IF == createDisposition)
+        || (FILE_OVERWRITE == createDisposition)
+        || (FILE_OVERWRITE_IF == createDisposition));
+
+    if (!isNewFile) {
+        return FLT_POSTOP_FINISHED_PROCESSING;
+    }
 
     clientId.UniqueProcess = PsGetCurrentProcessId();
     clientId.UniqueThread = NULL;
@@ -130,41 +117,30 @@ PreCreateOperation(
     status = RtlStringCchPrintfW(
         fileNameBuffer,
         FILENAME_SIZE,
-        L"%wZ::%wZ\n",
+        L"%wZ::%wZ\0\n",
         &FltObjects->FileObject->FileName,
         &exeNameString
     );
     CHECK(status)
 
-    RtlInsertElementGenericTableAvl(
-        &LogTable,
-        &fileNameBuffer,
-        FILENAME_SIZE_BYTES,
-        &newLog
+    status = RtlStringCbLengthW(
+        fileNameBuffer,
+        FILENAME_SIZE,
+        &fileNameLength
     );
-    Counter++;
+    CHECK(status)
 
-    if (Counter % 100 == 0) {
-        status = WriteLogToFile();
-        CHECK(status)
-    }
+    timeout.QuadPart = -10;
+    status = FltSendMessage(
+        Filter,
+        &GlobalClientPort,
+        fileNameBuffer,
+        (ULONG)fileNameLength + 2, // `Length` does not include the trailing null character
+        0,
+        0,
+        &timeout
+    );
 
-    return FLT_PREOP_SUCCESS_NO_CALLBACK;
-}
-
-FLT_POSTOP_CALLBACK_STATUS
-PostCreateOperation(
-    _Inout_ PFLT_CALLBACK_DATA Data,
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ PVOID CompletionContext,
-    _In_ FLT_POST_OPERATION_FLAGS Flags
-) {
-    UNREFERENCED_PARAMETER(Data);
-    UNREFERENCED_PARAMETER(FltObjects);
-    UNREFERENCED_PARAMETER(CompletionContext);
-    UNREFERENCED_PARAMETER(Flags);
-
-    KdPrint(("PostCreateOperation\n"));
     return FLT_POSTOP_FINISHED_PROCESSING;
 }
 
@@ -175,7 +151,6 @@ FilterUnload(
     UNREFERENCED_PARAMETER(Flags);
 
     FltUnregisterFilter(Filter);
-    //ZwClose(LogHandle);
 
     return STATUS_SUCCESS;
 }
@@ -222,81 +197,47 @@ CONST FLT_REGISTRATION FilterRegistration = {
 
 };
 
-RTL_GENERIC_COMPARE_RESULTS
-CompareFileNames(
-    __in struct _RTL_AVL_TABLE* Table,
-    __in PVOID  FirstStruct,
-    __in PVOID  SecondStruct
+NTSTATUS
+connectNotify(
+    IN PFLT_PORT ClientPort,
+    IN PVOID ServerPortCookie,
+    IN PVOID ConnectionContext,
+    IN ULONG SizeOfContext,
+    OUT PVOID* ConnectionPortCookie
 ) {
-    UNREFERENCED_PARAMETER(Table);
-    UNICODE_STRING str1;
-    UNICODE_STRING str2;
+    UNREFERENCED_PARAMETER(ServerPortCookie);
+    UNREFERENCED_PARAMETER(ConnectionContext);
+    UNREFERENCED_PARAMETER(SizeOfContext);
+    UNREFERENCED_PARAMETER(ConnectionPortCookie);
 
-    str1.Buffer = FirstStruct;
-    str2.Buffer = SecondStruct;
-    str1.Length = FILENAME_SIZE;
-    str2.Length = FILENAME_SIZE;
-    str1.MaximumLength = FILENAME_SIZE;
-    str2.MaximumLength = FILENAME_SIZE;
-
-    LONG result = RtlCompareUnicodeString(
-        &str1,
-        &str2,
-        FALSE
-    );
-
-    if (result == 0) {
-        return GenericEqual;
-    }
-    else if (result > 0) {
-        return GenericGreaterThan;
-    }
-    else {
-        return GenericLessThan;
-    }
-}
-
-PVOID
-AllocateRoutine (
-    __in struct _RTL_AVL_TABLE* Table,
-    __in CLONG  ByteSize
-) {
-    UNREFERENCED_PARAMETER(Table);
-
-    ExAcquireFastMutex(&ShMemMutex);
-
-    if(ShMem + ShMemOffset + ByteSize > ShMem + sizeof(ShMem))
-    {
-        ShMemOffset = 0;
-    }
-
-    PCHAR ret = ShMem + ShMemOffset;
-    ShMemOffset += ByteSize;
-
-    KdPrint(("%p + %z = %p", ShMem, ShMemOffset, ret));
-
-    /*return ExAllocatePool2(
-        POOL_FLAG_NON_PAGED,
-        ByteSize,
-        'wpma'
-    );*/
-
-    ExReleaseFastMutex(&ShMemMutex);
-
-    return ret;
+    GlobalClientPort = ClientPort;
+    return 0;
 }
 
 VOID
-FreeRoutine(
-    __in struct _RTL_AVL_TABLE* Table,
-    __in PVOID  Buffer
+disconnectNotify(
+    IN PVOID ConnectionCookie
 ) {
-    UNREFERENCED_PARAMETER(Table);
-    UNREFERENCED_PARAMETER(Buffer);
-    /*ExFreePoolWithTag(
-        Buffer,
-        'wpma'
-    );*/
+    UNREFERENCED_PARAMETER(ConnectionCookie);
+}
+
+NTSTATUS
+messageNotify(
+    IN PVOID PortCookie,
+    IN PVOID InputBuffer OPTIONAL,
+    IN ULONG InputBufferLength,
+    OUT PVOID OutputBuffer OPTIONAL,
+    IN ULONG OutputBufferLength,
+    OUT PULONG ReturnOutputBufferLength
+) {
+    UNREFERENCED_PARAMETER(PortCookie);
+    UNREFERENCED_PARAMETER(InputBuffer);
+    UNREFERENCED_PARAMETER(InputBufferLength);
+    UNREFERENCED_PARAMETER(OutputBuffer);
+    UNREFERENCED_PARAMETER(OutputBufferLength);
+    UNREFERENCED_PARAMETER(ReturnOutputBufferLength);
+
+    return 0;
 }
 
 NTSTATUS
@@ -307,18 +248,6 @@ DriverEntry(
     UNREFERENCED_PARAMETER(RegistryPath);
 
     NTSTATUS    status;
-    Counter = 0;
-    ShMemOffset = 0;
-
-    ExInitializeFastMutex(&ShMemMutex);
-
-    RtlInitializeGenericTableAvl(
-        &LogTable,
-        CompareFileNames,
-        AllocateRoutine,
-        FreeRoutine,
-        NULL
-    );
 
     status = FltRegisterFilter(
         DriverObject,                  //Driver
@@ -329,8 +258,41 @@ DriverEntry(
     status = FltStartFiltering(Filter);
     if (!NT_SUCCESS(status)) {
         FltUnregisterFilter(Filter);
-        ZwClose(LogHandle);
     }
+
+    // Create port for communication
+    PSECURITY_DESCRIPTOR securityDescriptor;
+    status = FltBuildDefaultSecurityDescriptor(
+        &securityDescriptor,
+        FLT_PORT_ALL_ACCESS | FLT_PORT_CONNECT
+    );
+
+    UNICODE_STRING portName;
+    RtlInitUnicodeString(&portName, L"\\WindowsPackageManagerPort");
+
+    OBJECT_ATTRIBUTES attributes;
+    InitializeObjectAttributes(
+        &attributes,
+        &portName,
+        OBJ_KERNEL_HANDLE,
+        NULL,
+        securityDescriptor
+    )
+
+    status = FltCreateCommunicationPort(
+        Filter,
+        &ServerPort,
+        &attributes,
+        NULL,
+        connectNotify,
+        disconnectNotify,
+        messageNotify,
+        100
+    );
+
+    FltFreeSecurityDescriptor(
+        securityDescriptor
+    );
 
     return status;
 }
