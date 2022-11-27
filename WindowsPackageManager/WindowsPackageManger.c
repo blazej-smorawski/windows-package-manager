@@ -48,10 +48,13 @@ PostCreateOperation(
     UNREFERENCED_PARAMETER(Flags);
 
     WCHAR       fileNameBuffer[FILENAME_SIZE];
-    WCHAR       exeNameBuffer[FILENAME_SIZE];
+    /*
+     * This buffer is going to receive `UNICODE_STRING` + `WCHAR[]` buffer 
+     */
+    WCHAR       exeNameBuffer[FILENAME_SIZE + sizeof(UNICODE_STRING)];
 
     NTSTATUS            status;
-    UNICODE_STRING      exeNameString;
+    PUNICODE_STRING     exeNameString;
     size_t              fileNameLength;
 
     HANDLE              processHandle;
@@ -65,18 +68,19 @@ PostCreateOperation(
     if (GlobalClientPort == NULL) {
         return FLT_POSTOP_FINISHED_PROCESSING;
     }
-
-    processHandle = PsGetCurrentProcessId();
-
-    // Get create disposition
-    // `Options`
-    // Bitmask of flags that specify the options to be applied when creating or opening the file, 
-    // as well as the action to be taken if the file already exists.
-    // The low 24 bits of this member correspond to the CreateOptions parameter to FltCreateFile.
-    // The high 8 bits correspond to the CreateDisposition parameter to FltCreateFile.
+    /*
+     * Get create disposition
+     * `Options`
+     * Bitmask of flags that specify the options to be applied when creating or opening the file, 
+     * as well as the action to be taken if the file already exists.
+     * The low 24 bits of this member correspond to the CreateOptions parameter to FltCreateFile.
+     * The high 8 bits correspond to the CreateDisposition parameter to FltCreateFile.
+     */
     createDisposition = (Data->Iopb->Parameters.Create.Options >> 24) & 0x000000FF;
 
-    // Check if new file is creating or not
+    /*
+     * Check if new file is creating or not
+     */ 
     isNewFile = ((FILE_SUPERSEDE == createDisposition)
         || (FILE_CREATE == createDisposition)
         || (FILE_OPEN_IF == createDisposition)
@@ -101,25 +105,22 @@ PostCreateOperation(
     );
     CHECK(status);
 
-    exeNameString.Buffer = exeNameBuffer;
-    exeNameString.Length = 0;
-    exeNameString.MaximumLength = sizeof(exeNameBuffer);
-
     status = ZwQueryInformationProcess(
         processHandle,
         ProcessImageFileName,
-        &exeNameString,
-        sizeof(exeNameBuffer),
+        exeNameBuffer,
+        FILENAME_SIZE_BYTES + sizeof(UNICODE_STRING),
         NULL
     );
     CHECK(status)
 
+    exeNameString = (PUNICODE_STRING)exeNameBuffer;
     status = RtlStringCchPrintfW(
         fileNameBuffer,
         FILENAME_SIZE,
         L"%wZ::%wZ\0\n",
         &FltObjects->FileObject->FileName,
-        &exeNameString
+        exeNameString
     );
     CHECK(status)
 
@@ -150,6 +151,7 @@ FilterUnload(
 ) {
     UNREFERENCED_PARAMETER(Flags);
 
+    FltCloseCommunicationPort(ServerPort);
     FltUnregisterFilter(Filter);
 
     return STATUS_SUCCESS;
@@ -289,6 +291,9 @@ DriverEntry(
         messageNotify,
         100
     );
+    if (!NT_SUCCESS(status)) {
+        FltUnregisterFilter(Filter);
+    }
 
     FltFreeSecurityDescriptor(
         securityDescriptor

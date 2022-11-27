@@ -21,7 +21,6 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{5A811B43-A658-4F01-AB85-8352609B4081}</ProjectGuid>
     <TemplateGuid>{dd38f7fc-d7bd-488b-9242-7d8754cde80d}</TemplateGuid>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <MinimumVisualStudioVersion>12.0</MinimumVisualStudioVersion>
     <Configuration>Debug</Configuration>
     <Platform Condition="'$(Platform)' == ''">x64</Platform>
@@ -93,6 +92,10 @@
     <Inf Include="WindowsPackageManager.inf" />
   </ItemGroup>
   <ItemGroup>
+    <FilesToPackage Include="E:\GitHub\WindowsPackageManager\x64\Debug\WindowsPackageManager.sys">
+      <PackageRelativeDirectory>
+      </PackageRelativeDirectory>
+    </FilesToPackage>
     <FilesToPackage Include="E:\GitHub\WindowsPackageManager\WindowsPackageManagerService\bin\Release\WindowsPackageManagerService.exe" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
       <PackageRelativeDirectory>WindowsPackageManagerService.ex</PackageRelativeDirectory>
     </FilesToPackage>
