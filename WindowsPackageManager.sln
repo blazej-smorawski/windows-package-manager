@@ -13,7 +13,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WindowsPackageManagerUI", "
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WindowsPackageManagerUI.Core", "WindowsPackageManagerUI.Core\WindowsPackageManagerUI.Core.csproj", "{813B29A7-8341-4B84-A84B-42BBCBC4909C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WindowsPackageManagerUserInterface", "WindowsPackageManagerUserInterface\WindowsPackageManagerUserInterface.csproj", "{F0B97964-7A0D-41ED-A68A-97D603C8A63D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WindowsPackageManagerUserInterface", "WindowsPackageManagerUserInterface\WindowsPackageManagerUserInterface.csproj", "{F0B97964-7A0D-41ED-A68A-97D603C8A63D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementy rozwiązania", "Elementy rozwiązania", "{9F3A49D9-1FA7-44F6-B009-7E56E624648C}"
+	ProjectSection(SolutionItems) = preProject
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

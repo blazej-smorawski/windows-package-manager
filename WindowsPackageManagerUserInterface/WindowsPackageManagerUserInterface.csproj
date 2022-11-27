@@ -10,9 +10,9 @@
     <PublishProfile>win10-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
-
-	<WindowsPackageType>None</WindowsPackageType>
-	<WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>
+	<EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+	<!--<WindowsPackageType>None</WindowsPackageType>
+	<WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>-->
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,7 +37,7 @@
     package has not yet been restored.
   -->
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
-    <ProjectCapability Include="Msix"/>
+    <ProjectCapability Include="Msix" />
   </ItemGroup>
 
   <!-- 
