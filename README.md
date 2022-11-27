@@ -1,1 +1,1 @@
-![Alt text](Static/visualisation.gif?raw=true "Title")
+![Alt text](Static/visualisation.jpg?raw=true "Title")
