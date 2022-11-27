@@ -5,12 +5,14 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
-using System.Runtime.InteropServices;
+using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
-using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Windows.Storage;
+using Windows.UI.WindowManagement;
 using WindowsPackageManagerUserInterface.Helpers;
-using WinRT; // required to support Window.As<ICompositionSupportsSystemBackdrop>()
 
 namespace WindowsPackageManagerUserInterface;
 public sealed partial class MainWindow : Window
@@ -25,6 +27,11 @@ public sealed partial class MainWindow : Window
 
         MicaHelper micaHelper = new MicaHelper(this);
         micaHelper.TrySetSystemBackdrop();
+
+       /* IntPtr hWnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hWnd);
+        var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+        appWindow.Resize(new Windows.Graphics.SizeInt32 { Width = 800, Height = 1200 });*/
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -53,13 +60,15 @@ public sealed partial class MainWindow : Window
             {
                 children.Add(new TreeNode
                 {
-                    Name = file,
+                    Name = file.Split('\\').Last<string>(),
+                    Path = file,
                     Children = new ObservableCollection<TreeNode>()
                 });
             }
             data.Add(new TreeNode
             {
-                Name = log.Key,
+                Name = log.Key.Split('\\').Last<string>(),
+                Path = log.Key,
                 Children = children,
             });
         }
@@ -74,6 +83,12 @@ public class TreeNode
     {
         get; set;
     }
+
+    public string Path
+    {
+        get; set;
+    }
+
     public ObservableCollection<TreeNode> Children { get; set; } = new ObservableCollection<TreeNode>();
 
     public override string ToString()

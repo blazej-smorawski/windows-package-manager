@@ -11,6 +11,8 @@
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
 	<EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+	<ApplicationIcon>Assets\icons8-view-96.ico</ApplicationIcon>
+	<PackageIcon>icons8-view-96.png</PackageIcon>
 	<!--<WindowsPackageType>None</WindowsPackageType>
 	<WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>-->
   </PropertyGroup>
@@ -38,6 +40,12 @@
   -->
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Assets\icons8-view-96.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
   <!-- 

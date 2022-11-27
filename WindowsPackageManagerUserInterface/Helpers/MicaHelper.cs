@@ -42,6 +42,13 @@ namespace WindowsPackageManagerUserInterface.Helpers
                 m_backdropController = new Microsoft.UI.Composition.SystemBackdrops.MicaController()
                 {
                     Kind = MicaKind.Base,
+                    TintColor = new Windows.UI.Color()
+                    {
+                        A=1,
+                        R=12,
+                        G=23,
+                        B=200,
+                    },
                 };
 
                 // Enable the system backdrop.
