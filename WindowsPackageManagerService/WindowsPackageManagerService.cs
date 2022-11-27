@@ -96,7 +96,6 @@ namespace WindowsPackageManagerService
                 eventLog.WriteEntry("Log("+ result.ToString("X")+ "):"+log);
 
                 string[] strings = log.Split(':');
-                eventLog.WriteEntry(strings[0] + " " + strings[1] + " " + strings[2]);
 
                 SortedSet<string> files;
                 if (logsCollection.TryGetValue(strings[2], out files))
