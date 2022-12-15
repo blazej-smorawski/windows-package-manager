@@ -7,7 +7,7 @@ Signature="$WINDOWS NT$"
 Class="ActivityMonitor" 
 ClassGuid={b86dff51-a31e-4bac-b3cf-e8cfe75c9fc2}
 Provider=%ManufacturerName%
-DriverVer=24/10/2022,1.0.0.0
+DriverVer=12/12/2022,1.0.0.0
 CatalogFile=WindowsPackageManager.cat
 
 ;This template is supported for OS version 17763 (Windows 10 version 1809) and after.
@@ -47,7 +47,7 @@ Description      = %ServiceDescription%
 ServiceBinary    = %12%\%DriverName%.sys        ;%windir%\system32\drivers\
 Dependencies     = FltMgr
 ServiceType      = 2                            ;SERVICE_FILE_SYSTEM_DRIVER
-StartType        = 3                            ;SERVICE_DEMAND_START
+StartType        = 2                            ;SERVICE_DEMAND_START
 ErrorControl     = 1                            ;SERVICE_ERROR_NORMAL
 LoadOrderGroup   = "FSFilter Activity Monitor"
 AddReg           = WindowsPackageManager.AddRegistry

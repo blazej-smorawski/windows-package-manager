@@ -13,8 +13,18 @@
 	<EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
 	<ApplicationIcon>Assets\icons8-view-96.ico</ApplicationIcon>
 	<PackageIcon>icons8-view-96.png</PackageIcon>
-	<!--<WindowsPackageType>None</WindowsPackageType>
-	<WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>-->
+	<GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+	<AppxPackageSigningEnabled>True</AppxPackageSigningEnabled>
+	<PackageCertificateThumbprint>F25E556ED6F5E58CD39CBE9073A0529D4988FB7E</PackageCertificateThumbprint>
+	<AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+	<AppxAutoIncrementPackageRevision>True</AppxAutoIncrementPackageRevision>
+	<AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+	<GenerateTestArtifacts>True</GenerateTestArtifacts>
+	<AppxBundle>Always</AppxBundle>
+	<AppxBundlePlatforms>x86|x64</AppxBundlePlatforms>
+	<HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
+	<!--<WindowsPackageType>None</WindowsPackageType>-->
+	<WindowsAppSDKSelfContained>True</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>

@@ -8,8 +8,8 @@
 
   <Identity
     Name="223d9eaa-7c19-4cff-a4f2-42b0b137aeb4"
-    Publisher="CN=blaze"
-    Version="1.0.0.0" />
+    Publisher="CN=Błażej Smorawski"
+    Version="1.0.1.0" />
 
   <Properties>
     <DisplayName>WindowsPackageManagerUserInterface</DisplayName>

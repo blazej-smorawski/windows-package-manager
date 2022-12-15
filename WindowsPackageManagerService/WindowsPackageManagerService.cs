@@ -25,6 +25,7 @@ namespace WindowsPackageManagerService
         private static Thread loggingThread;
         private static Thread persistingThread;
         private string logFile = "C:\\WindowsPackageManager\\WindowsPackageManagerLog.txt";
+        private bool threadsCreated = false;
 
 
         // ---------======= Extern code =======--------- //
@@ -36,6 +37,12 @@ namespace WindowsPackageManagerService
 
         [DllImport("WindowsPackageManager.dll", CallingConvention = CallingConvention.Cdecl)]
         static extern int GetWindowsPackageManagerLog([MarshalAs(UnmanagedType.LPWStr)] StringBuilder log, int maxCharacters);
+
+        [DllImport("FltLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        static extern int FilterAttach([MarshalAs(UnmanagedType.LPWStr)] string lpFilterName, [MarshalAs(UnmanagedType.LPWStr)] string lpVolumeName, [MarshalAs(UnmanagedType.LPWStr)] string lpInstanceName, int dwCreatedInstanceNameLength, [MarshalAs(UnmanagedType.LPWStr)] string lpCreatedInstanceName);
+
+        [DllImport("FltLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        static extern int FilterLoad([MarshalAs(UnmanagedType.LPWStr)] string lpFilterName);
         // ---------======= ----------- =======--------- //
 
 
@@ -54,8 +61,29 @@ namespace WindowsPackageManagerService
 
         protected override void OnStart(string[] args)
         {
-            eventLog.WriteEntry("In OnStart.");
-            StartWindowsPackageManagerLogging();
+            /*int result = FilterLoad("WindowsPackageManager");
+
+            if (result != 0)
+            {
+                eventLog.WriteEntry("Failed to load WPM filter! (" + result + ")");
+                return;
+            }*/
+
+            int result = FilterAttach("WindowsPackageManager", "C:\\", null, 0, null);
+
+            if (result != 0)
+            {
+                eventLog.WriteEntry("Failed attach filter! (" + result + ")");
+                return;
+            }
+
+            result = StartWindowsPackageManagerLogging();
+
+            if (result != 0)
+            {
+                eventLog.WriteEntry("Failed to start logging! (" + result + ")");
+                return;
+            }
 
             loggingThread = new Thread(LoggingLoop);
             loggingThread.IsBackground = true;
@@ -64,24 +92,30 @@ namespace WindowsPackageManagerService
             persistingThread = new Thread(PersistLoop);
             persistingThread.IsBackground = true;
             persistingThread.Start();
+
+            threadsCreated = true;
+
+            eventLog.WriteEntry("Successfully started WindowsPackageManager");
         }
 
         protected override void OnStop()
         {
-            eventLog.WriteEntry("In OnStop.");
-
-            stopEvent.Set();
-            if (!loggingThread.Join(10000))
+            if (threadsCreated)
             {
-                loggingThread.Abort();
-            }
+                stopEvent.Set();
+                if (!loggingThread.Join(10000))
+                {
+                    loggingThread.Abort();
+                }
 
-            if (!persistingThread.Join(10000))
-            {
-                persistingThread.Abort();
+                if (!persistingThread.Join(10000))
+                {
+                    persistingThread.Abort();
+                }
             }
 
             StopWindowsPackageManagerLogging();
+            eventLog.WriteEntry("Successfully stopped WindowsPackageManager");
         }
 
         private void LoggingLoop()
@@ -92,8 +126,12 @@ namespace WindowsPackageManagerService
                 StringBuilder logBuilder = new StringBuilder(2048);
                 int result = GetWindowsPackageManagerLog(logBuilder, 2048);
 
+                if (result != 0)
+                {
+                    continue;
+                }
+
                 string log = logBuilder.ToString();
-                eventLog.WriteEntry("Log("+ result.ToString("X")+ "):"+log);
 
                 string[] strings = log.Split(':');
 

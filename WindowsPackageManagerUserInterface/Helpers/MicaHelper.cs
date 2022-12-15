@@ -49,6 +49,13 @@ namespace WindowsPackageManagerUserInterface.Helpers
                         G=23,
                         B=200,
                     },
+                    FallbackColor = new Windows.UI.Color()
+                    {
+                        A = 1,
+                        R = 12,
+                        G = 23,
+                        B = 200,
+                    },
                 };
 
                 // Enable the system backdrop.
